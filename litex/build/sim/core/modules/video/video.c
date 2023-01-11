@@ -1,3 +1,7 @@
+// Copyright (c) 2023 Victor Suarez Rovere <suarezvictor@gmail.com>
+// Copyright (c) LiteX developers
+// FIXME: add license
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,19 +13,25 @@
 #include <termios.h>
 
 #include "modules.h"
+#include "sim_fb.c" //from https://github.com/suarezvictor/CflexHDL/blob/main/src/sim_fb.c
 
 struct session_s {
   char *hsync;
   char *vsync;
-  short *hcount;
-  short *vcount;
+  //short *hcount;
+  //short *vcount;
   char *de;
   char *sys_clk;
-  struct event *ev;
-  int x, y;
+  uint8_t *r;
+  uint8_t *g;
+  uint8_t *b;
+  short hres, vres;
+  short x, y;
+  unsigned frame, stride;
+  uint8_t *buf, *pbuf;
+  fb_handle_t fb;
 };
 
-struct event_base *base;
 static int litex_sim_module_pads_get(struct pad_s *pads, char *name, void **signal)
 {
   int ret = RC_OK;
@@ -47,11 +57,9 @@ out:
   return ret;
 }
 
-
 static int videosim_start(void *b)
 {
-  base = (struct event_base *)b;
-  printf("[video] loaded (%p)\n", base);
+  printf("[video] loaded (%p)\n", (struct event_base *)b);
   return RC_OK;
 }
 
@@ -91,9 +99,12 @@ static int videosim_add_pads(void *sess, struct pad_list_s *plist)
   if(!strcmp(plist->name, "vga")) {
     litex_sim_module_pads_get(pads, "hsync", (void**)&s->hsync);
     litex_sim_module_pads_get(pads, "vsync", (void**)&s->vsync);
-    litex_sim_module_pads_get(pads, "hcount", (void**)&s->hcount);
-    litex_sim_module_pads_get(pads, "vcount", (void**)&s->vcount);
+    //litex_sim_module_pads_get(pads, "hcount", (void**)&s->hcount);
+    //litex_sim_module_pads_get(pads, "vcount", (void**)&s->vcount);
     litex_sim_module_pads_get(pads, "de", (void**)&s->de);
+    litex_sim_module_pads_get(pads, "r", (void**)&s->r);
+    litex_sim_module_pads_get(pads, "g", (void**)&s->g);
+    litex_sim_module_pads_get(pads, "b", (void**)&s->b);
   }
 
 
@@ -101,6 +112,11 @@ static int videosim_add_pads(void *sess, struct pad_list_s *plist)
     litex_sim_module_pads_get(pads, "sys_clk", (void**) &s->sys_clk);
 out:
   return ret;
+}
+
+static uint8_t *alloc_buf(unsigned short hres, unsigned short vres)
+{
+  return (uint8_t *) malloc(hres*vres*sizeof(uint32_t));
 }
 
 static int videosim_tick(void *sess, uint64_t time_ps) {
@@ -111,25 +127,48 @@ static int videosim_tick(void *sess, uint64_t time_ps) {
     return RC_OK;
   }
 
-  if(*s->hsync)
+  if(*s->vsync)
   {
-    if(s->x != 0)
+    if(s->y != 0) //new frame
     {
-      if(*s->vsync)
+      if(!s->vres)
       {
-        //if(s->y != 0) printf("max x, y %d, %d\n", s->x, s->y); //nre frame condition
-        s->y = 0;
+        s->vres = s->y;
+        s->buf = alloc_buf(s->hres, s->vres);
+        //printf("[video] start, resolution %dx%d\n", s->hres, s->vres);
+        fb_init(s->hres, s->vres, false, &s->fb);
+        s->stride = s->hres*sizeof(uint32_t);
       }
-      else
-        s->y = s->y + 1;
+      s->y = 0;
+      s->pbuf = s->buf;
+      ++s->frame;
     }
+  }
+
+  if(*s->de)
+  {
+    if(s->pbuf)
+    {
+      *s->pbuf++ = *s->r;
+      *s->pbuf++ = *s->g;
+      *s->pbuf++ = *s->b;
+      s->pbuf++;
+    }
+    s->x = s->x + 1;
+  }
+  else if(s->x != 0)
+  {
+    if(s->buf) //update each horizontal line
+    {
+      fb_update(&s->fb, s->buf, s->stride);
+      s->pbuf = s->buf + s->y*s->stride;
+    }
+
+    if(s->hres) //avoid initial counting
+      s->y = s->y + 1;
+    s->hres = s->x; //this is set many times until settled
     s->x = 0;
   }
-  else
-    s->x = s->x + 1;
-
-  //printf("x, y %d %d, %d %d\n", s->x, *s->hcount, s->y, *s->vcount); //not equal as cause of sync
-
 
   return RC_OK;
 }
