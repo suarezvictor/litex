@@ -1324,7 +1324,7 @@ class LiteXSoC(SoC):
             "stream",
             "uartbone",
             "usb_acm",
-            "serial(x)",
+            "serial",
         ]
         uart_pads_name = "serial" if uart_name == "sim" else uart_name
         uart_pads      = self.platform.request(uart_pads_name, loose=True)
