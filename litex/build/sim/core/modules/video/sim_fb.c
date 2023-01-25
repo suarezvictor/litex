@@ -54,4 +54,5 @@ void fb_deinit(fb_handle_t *handle)
     SDL_DestroyRenderer(handle->renderer);
     SDL_DestroyWindow(handle->win);
     handle->win = NULL;
+    SDL_Quit();
 }
