@@ -335,9 +335,10 @@ class SimSoC(SoCCore):
             
         # Video --------------------------------------------------------------------------------------
         if with_video_framebuffer:
-            self.submodules.videophy = VideoPHYModel(platform.request("vga"))
+            video_pads = platform.request("vga")
+            self.submodules.videophy = VideoPHYModel(video_pads)
             self.add_video_framebuffer(phy=self.videophy, timings="640x480@60Hz", format="rgb888")
-            self.videophy.comb += video_pads.valid.eq(~self.video_framebuffer.unde
+            self.videophy.comb += video_pads.valid.eq(~self.video_framebuffer.underflow)
 
         # Simulation debugging ----------------------------------------------------------------------
         if sim_debug:
