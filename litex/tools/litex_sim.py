@@ -198,6 +198,7 @@ class SimSoC(SoCCore):
         spi_flash_init        = [],
         with_gpio             = False,
         with_video_framebuffer = False,
+        with_video_terminal = False,
         sim_debug             = False,
         trace_reset_on        = False,
         **kwargs):
@@ -333,12 +334,17 @@ class SimSoC(SoCCore):
             self.submodules.gpio = GPIOTristate(platform.request("gpio"), with_irq=True)
             self.irq.add("gpio", use_loc_if_exists=True)
             
-        # Video --------------------------------------------------------------------------------------
+        # Video Framebuffer ------------------------------------------------------------------------
         if with_video_framebuffer:
             video_pads = platform.request("vga")
             self.submodules.videophy = VideoPHYModel(video_pads)
             self.add_video_framebuffer(phy=self.videophy, timings="640x480@60Hz", format="rgb888")
             self.videophy.comb += video_pads.valid.eq(~self.video_framebuffer.underflow)
+
+        # Video Terminal ---------------------------------------------------------------------------
+        if with_video_terminal:
+            self.submodules.videophy = VideoPHYModel(platform.request("vga"))
+            self.add_video_terminal(phy=self.videophy, timings="640x480@60Hz")
 
         # Simulation debugging ----------------------------------------------------------------------
         if sim_debug:
@@ -436,6 +442,7 @@ def sim_args(parser):
     parser.add_argument("--spi_flash-init",       default=None,            help="SPI Flash init file.")
     parser.add_argument("--with-gpio",            action="store_true",     help="Enable Tristate GPIO (32 pins).")
     parser.add_argument("--with-video-framebuffer", action="store_true",   help="Enable Video Framebuffer.")
+    parser.add_argument("--with-video-terminal",  action="store_true",   help="Enable Video Terminal.")
     parser.add_argument("--sim-debug",            action="store_true",     help="Add simulation debugging modules.")
     parser.add_argument("--gtkwave-savefile",     action="store_true",     help="Generate GTKWave savefile.")
     parser.add_argument("--non-interactive",      action="store_true",     help="Run simulation without user input.")
@@ -516,7 +523,7 @@ def main():
         sim_config.add_module("spdeeprom", "i2c")
 
     # Video.
-    if args.with_video_framebuffer:
+    if args.with_video_framebuffer or args.with_video_terminal:
             sim_config.add_module("video", "vga")
 
     # SoC ------------------------------------------------------------------------------------------
@@ -531,6 +538,7 @@ def main():
         with_spi_flash     = args.with_spi_flash,
         with_gpio          = args.with_gpio,
         with_video_framebuffer = args.with_video_framebuffer,
+        with_video_terminal = args.with_video_terminal,
         sim_debug          = args.sim_debug,
         trace_reset_on     = int(float(args.trace_start)) > 0 or int(float(args.trace_end)) > 0,
         spi_flash_init     = None if args.spi_flash_init is None else get_mem_data(args.spi_flash_init, endianness="big"),
