@@ -133,6 +133,7 @@ _io = [
         Subsignal("hsync", Pins(1)),
         Subsignal("vsync", Pins(1)),
         Subsignal("de", Pins(1)),
+        Subsignal("valid", Pins(1)),
         Subsignal("r",  Pins(8)),
         Subsignal("g",  Pins(8)),
         Subsignal("b",  Pins(8)),
@@ -161,18 +162,10 @@ class VideoPHYModel(Module, AutoCSR):
             self.comb += pads.clk.eq(ClockSignal(clock_domain))
 
         # Drive Controls.
-        if hasattr(pads, "de"):
-            self.comb += pads.de.eq(sink.de)
-
-        if hasattr(pads, "hsync_n"):
-            self.comb += pads.hsync.eq(~sink.hsync)
-        else:
-            self.comb += pads.hsync.eq(sink.hsync)
-
-        if hasattr(pads, "vsync_n"):
-            self.comb += pads.vsync.eq(~sink.vsync)
-        else:
-            self.comb += pads.vsync.eq(sink.vsync)
+        self.comb += pads.valid.eq(1) #may be overriden with underflow from the framebuffer
+        self.comb += pads.de.eq(sink.de)
+        self.comb += pads.hsync.eq(sink.hsync)
+        self.comb += pads.vsync.eq(sink.vsync)
 
         # Drive Datas.
         cbits  = len(pads.r)
@@ -344,6 +337,7 @@ class SimSoC(SoCCore):
         if with_video_framebuffer:
             self.submodules.videophy = VideoPHYModel(platform.request("vga"))
             self.add_video_framebuffer(phy=self.videophy, timings="640x480@60Hz", format="rgb888")
+            self.videophy.comb += video_pads.valid.eq(~self.video_framebuffer.unde
 
         # Simulation debugging ----------------------------------------------------------------------
         if sim_debug:
@@ -549,6 +543,7 @@ def main():
             soc.add_constant("LOCALIP{}".format(i+1), int(args.local_ip.split(".")[i]))
         for i in range(4):
             soc.add_constant("REMOTEIP{}".format(i+1), int(args.remote_ip.split(".")[i]))
+    soc.add_constant("LITEX_SIMULATION") #this is to make the software know if it's simulation
 
     # Build/Run ------------------------------------------------------------------------------------
     def pre_run_callback(vns):
