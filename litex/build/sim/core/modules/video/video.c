@@ -18,11 +18,9 @@
 struct session_s {
   char *hsync;
   char *vsync;
-  //short *hcount;
-  //short *vcount;
   char *de;
   char *valid;
-  char *sys_clk;
+  char *pix_clk;
   uint8_t *r;
   uint8_t *g;
   uint8_t *b;
@@ -100,18 +98,23 @@ static int videosim_add_pads(void *sess, struct pad_list_s *plist)
   if(!strcmp(plist->name, "vga")) {
     litex_sim_module_pads_get(pads, "hsync", (void**)&s->hsync);
     litex_sim_module_pads_get(pads, "vsync", (void**)&s->vsync);
-    //litex_sim_module_pads_get(pads, "hcount", (void**)&s->hcount);
-    //litex_sim_module_pads_get(pads, "vcount", (void**)&s->vcount);
     litex_sim_module_pads_get(pads, "de", (void**)&s->de);
     litex_sim_module_pads_get(pads, "valid", (void**)&s->valid);
     litex_sim_module_pads_get(pads, "r", (void**)&s->r);
     litex_sim_module_pads_get(pads, "g", (void**)&s->g);
     litex_sim_module_pads_get(pads, "b", (void**)&s->b);
+	char *clk_pad = NULL;
+    litex_sim_module_pads_get(pads, "clk", (void**) &clk_pad);
+    if(clk_pad != NULL)
+		s->pix_clk = clk_pad; //overrides sys_clk if previously set
   }
 
-
   if(!strcmp(plist->name, "sys_clk"))
-    litex_sim_module_pads_get(pads, "sys_clk", (void**) &s->sys_clk);
+  {
+    if(!s->pix_clk) //not selected if vga clk was already used
+      litex_sim_module_pads_get(pads, "sys_clk", (void**) &s->pix_clk);
+  }
+  
 out:
   return ret;
 }
@@ -125,7 +128,7 @@ static int videosim_tick(void *sess, uint64_t time_ps) {
   static clk_edge_state_t edge;
   struct session_s *s = (struct session_s*)sess;
 
-  if(!clk_pos_edge(&edge, *s->sys_clk)) {
+  if(!clk_pos_edge(&edge, *s->pix_clk)) {
     return RC_OK;
   }
 
